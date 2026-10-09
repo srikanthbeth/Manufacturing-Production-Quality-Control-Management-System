@@ -1,205 +1,115 @@
 from datetime import datetime
+from decimal import Decimal
+from enum import Enum
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy.orm import Session
-
-from core.dependencies import require_roles
-from core.enums import UserRole
-from database import get_db
-from schemas.downtime import (
-    DowntimeCreate,
-    DowntimeListResponse,
-    DowntimePercentageResponse,
-    DowntimeResponse,
-    DowntimeUpdate,
-)
-from services.downtime_service import DowntimeService
+from pydantic import BaseModel, ConfigDict, Field
 
 
-router = APIRouter(
-    prefix="/api/v1/downtime",
-    tags=["Downtime Management"],
-)
+class DowntimeCategory(str, Enum):
+    MACHINE_BREAKDOWN = "Machine Breakdown"
+    MATERIAL_SHORTAGE = "Material Shortage"
+    QUALITY_ISSUE = "Quality Issue"
+    POWER_FAILURE = "Power Failure"
+    MAINTENANCE = "Maintenance"
+    OPERATOR_ISSUE = "Operator Issue"
 
 
-VIEW_ROLES = [
-    UserRole.SUPER_ADMIN,
-    UserRole.PLANT_MANAGER,
-    UserRole.PRODUCTION_MANAGER,
-    UserRole.QUALITY_MANAGER,
-    UserRole.MAINTENANCE_ENGINEER,
-    UserRole.PRODUCTION_SUPERVISOR,
-]
-
-
-MANAGE_ROLES = [
-    UserRole.SUPER_ADMIN,
-    UserRole.PRODUCTION_MANAGER,
-    UserRole.MAINTENANCE_ENGINEER,
-    UserRole.PRODUCTION_SUPERVISOR,
-]
-
-
-@router.post(
-    "",
-    response_model=DowntimeResponse,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[
-        Depends(
-            require_roles(*MANAGE_ROLES)
-        )
-    ],
-)
-def create_downtime(
-    data: DowntimeCreate,
-    db: Session = Depends(get_db),
-):
-    service = DowntimeService(db)
-
-    return service.create_downtime(data)
-
-
-@router.get(
-    "",
-    response_model=DowntimeListResponse,
-    dependencies=[
-        Depends(
-            require_roles(*VIEW_ROLES)
-        )
-    ],
-)
-def list_downtime(
-    search: Optional[str] = Query(
-        default=None
-    ),
-    category: Optional[str] = Query(
-        default=None
-    ),
-    machine_id: Optional[int] = Query(
-        default=None,
-        gt=0,
-    ),
-    production_line_id: Optional[int] = Query(
-        default=None,
-        gt=0,
-    ),
-    responsible_person_id: Optional[int] = Query(
-        default=None,
-        gt=0,
-    ),
-    page: int = Query(
-        default=1,
-        ge=1,
-    ),
-    limit: int = Query(
-        default=10,
-        ge=1,
-        le=100,
-    ),
-    db: Session = Depends(get_db),
-):
-    service = DowntimeService(db)
-
-    return service.list_downtime(
-        search=search,
-        category=category,
-        machine_id=machine_id,
-        production_line_id=production_line_id,
-        responsible_person_id=(
-            responsible_person_id
-        ),
-        page=page,
-        limit=limit,
+class DowntimeBase(BaseModel):
+    downtime_number: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
     )
 
-
-@router.get(
-    "/percentage",
-    response_model=DowntimePercentageResponse,
-    dependencies=[
-        Depends(
-            require_roles(*VIEW_ROLES)
-        )
-    ],
-)
-def calculate_downtime_percentage(
-    machine_id: int = Query(
+    machine_id: int = Field(
         ...,
         gt=0,
-    ),
-    start_time: datetime = Query(...),
-    end_time: datetime = Query(...),
-    db: Session = Depends(get_db),
-):
-    service = DowntimeService(db)
+    )
 
-    return service.calculate_downtime_percentage(
-        machine_id=machine_id,
-        start_time=start_time,
-        end_time=end_time,
+    production_line_id: int = Field(
+        ...,
+        gt=0,
+    )
+
+    responsible_person_id: int = Field(
+        ...,
+        gt=0,
+    )
+
+    category: DowntimeCategory
+
+    reason: str = Field(
+        ...,
+        min_length=1,
+    )
+
+    start_time: datetime
+
+    end_time: Optional[datetime] = None
+
+
+class DowntimeCreate(DowntimeBase):
+    pass
+
+
+class DowntimeUpdate(BaseModel):
+    downtime_number: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+    )
+
+    machine_id: Optional[int] = Field(
+        default=None,
+        gt=0,
+    )
+
+    production_line_id: Optional[int] = Field(
+        default=None,
+        gt=0,
+    )
+
+    responsible_person_id: Optional[int] = Field(
+        default=None,
+        gt=0,
+    )
+
+    category: Optional[DowntimeCategory] = None
+
+    reason: Optional[str] = Field(
+        default=None,
+        min_length=1,
+    )
+
+    start_time: Optional[datetime] = None
+
+    end_time: Optional[datetime] = None
+
+
+class DowntimeResponse(DowntimeBase):
+    id: int
+    duration_minutes: Decimal
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(
+        from_attributes=True
     )
 
 
-@router.get(
-    "/{downtime_id}",
-    response_model=DowntimeResponse,
-    dependencies=[
-        Depends(
-            require_roles(*VIEW_ROLES)
-        )
-    ],
-)
-def get_downtime(
-    downtime_id: int,
-    db: Session = Depends(get_db),
-):
-    service = DowntimeService(db)
-
-    return service.get_downtime(
-        downtime_id
-    )
+class DowntimeListResponse(BaseModel):
+    items: list[DowntimeResponse]
+    total: int
+    page: int
+    limit: int
+    pages: int
 
 
-@router.put(
-    "/{downtime_id}",
-    response_model=DowntimeResponse,
-    dependencies=[
-        Depends(
-            require_roles(*MANAGE_ROLES)
-        )
-    ],
-)
-def update_downtime(
-    downtime_id: int,
-    data: DowntimeUpdate,
-    db: Session = Depends(get_db),
-):
-    service = DowntimeService(db)
-
-    return service.update_downtime(
-        downtime_id,
-        data,
-    )
-
-
-@router.delete(
-    "/{downtime_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[
-        Depends(
-            require_roles(*MANAGE_ROLES)
-        )
-    ],
-)
-def delete_downtime(
-    downtime_id: int,
-    db: Session = Depends(get_db),
-):
-    service = DowntimeService(db)
-
-    service.delete_downtime(
-        downtime_id
-    )
-
-    return None
+class DowntimePercentageResponse(BaseModel):
+    machine_id: int
+    start_time: datetime
+    end_time: datetime
+    total_available_minutes: Decimal
+    total_downtime_minutes: Decimal
+    downtime_percentage: Decimal

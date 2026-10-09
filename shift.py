@@ -1,65 +1,142 @@
-from datetime import datetime, time
+from datetime import datetime
+from datetime import time
+from decimal import Decimal
+from typing import Optional
 
-from sqlalchemy import Boolean
-from sqlalchemy import Column
-from sqlalchemy import DateTime
-from sqlalchemy import Integer
-from sqlalchemy import String
-from sqlalchemy import Text
-from sqlalchemy import Time
-from sqlalchemy import UniqueConstraint
-from sqlalchemy.sql import func
-
-from database import Base
+from pydantic import BaseModel
+from pydantic import ConfigDict
+from pydantic import Field
 
 
-class Shift(Base):
-    __tablename__ = "shifts"
-
-    id = Column(
-        Integer,
-        primary_key=True,
-        index=True,
+class ShiftCreate(BaseModel):
+    name: str = Field(
+        min_length=2,
+        max_length=50,
     )
 
-    name = Column(
-        String(50),
-        nullable=False,
-        unique=True,
-        index=True,
+    start_time: time
+
+    end_time: time
+
+    description: Optional[str] = None
+
+    is_active: bool = True
+
+
+class ShiftUpdate(BaseModel):
+    name: Optional[str] = Field(
+        default=None,
+        min_length=2,
+        max_length=50,
     )
 
-    start_time = Column(
-        Time,
-        nullable=False,
+    start_time: Optional[time] = None
+
+    end_time: Optional[time] = None
+
+    description: Optional[str] = None
+
+    is_active: Optional[bool] = None
+
+
+class ShiftResponse(BaseModel):
+    id: int
+    name: str
+    start_time: time
+    end_time: time
+    description: Optional[str]
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(
+        from_attributes=True
     )
 
-    end_time = Column(
-        Time,
-        nullable=False,
+
+class ShiftListResponse(BaseModel):
+    items: list[ShiftResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class ShiftWorkerResponse(BaseModel):
+    id: int
+    shift_id: int
+    worker_id: int
+    assigned_at: datetime
+    created_at: datetime
+
+    model_config = ConfigDict(
+        from_attributes=True
     )
 
-    description = Column(
-        Text,
-        nullable=True,
+
+class ShiftProductionOutputCreate(BaseModel):
+    production_batch_id: int = Field(gt=0)
+
+    produced_quantity: Decimal = Field(
+        gt=0
     )
 
-    is_active = Column(
-        Boolean,
-        nullable=False,
-        default=True,
-        index=True,
+    rejected_quantity: Decimal = Field(
+        default=Decimal("0"),
+        ge=0,
     )
 
-    created_at = Column(
-        DateTime,
-        nullable=False,
-        server_default=func.now(),
+
+class ShiftProductionOutputResponse(BaseModel):
+    id: int
+    shift_id: int
+    production_batch_id: int
+    produced_quantity: Decimal
+    rejected_quantity: Decimal
+    recorded_at: datetime
+    created_at: datetime
+
+    model_config = ConfigDict(
+        from_attributes=True
     )
 
-    updated_at = Column(
-        DateTime,
-        nullable=False,
-        server_default=func.now(),
-        onupdate=func.now(),
+
+class ShiftMachineUsageCreate(BaseModel):
+    machine_id: int = Field(gt=0)
+
+    usage_hours: Decimal = Field(
+        gt=0
     )
+
+    downtime_hours: Decimal = Field(
+        default=Decimal("0"),
+        ge=0,
+    )
+
+    notes: Optional[str] = None
+
+
+class ShiftMachineUsageResponse(BaseModel):
+    id: int
+    shift_id: int
+    machine_id: int
+    usage_hours: Decimal
+    downtime_hours: Decimal
+    notes: Optional[str]
+    recorded_at: datetime
+    created_at: datetime
+
+    model_config = ConfigDict(
+        from_attributes=True
+    )
+
+
+class ShiftPerformanceResponse(BaseModel):
+    shift_id: int
+    shift_name: str
+    worker_count: int
+    total_produced_quantity: Decimal
+    total_rejected_quantity: Decimal
+    total_machine_usage_hours: Decimal
+    total_machine_downtime_hours: Decimal
+    production_efficiency: float
+    output_per_worker: float

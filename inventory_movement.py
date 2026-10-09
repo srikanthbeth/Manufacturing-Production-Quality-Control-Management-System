@@ -1,179 +1,82 @@
+from datetime import datetime
+from decimal import Decimal
+from enum import Enum
 from typing import Optional
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    Query,
-    status,
-)
-from sqlalchemy.orm import Session
-
-from core.dependencies import (
-    get_current_user,
-    require_roles,
-)
-from core.enums import UserRole
-from database import get_db
-from models.user import User
-from schemas.inventory_movement import (
-    InventoryMovementCreate,
-    InventoryMovementListResponse,
-    InventoryMovementResponse,
-    InventoryStockResponse,
-    InventoryTransactionHistoryResponse,
-)
-from services.inventory_movement_service import (
-    InventoryMovementService,
-)
+from pydantic import BaseModel, ConfigDict, Field
 
 
-router = APIRouter(
-    prefix="/api/v1/inventory-movements",
-    tags=["Inventory Movement"],
-)
+class InventoryMovementType(str, Enum):
+    RAW_MATERIAL_RECEIPT = "Raw Material Receipt"
+    MATERIAL_CONSUMPTION = "Material Consumption"
+    FINISHED_GOODS_PRODUCTION = "Finished Goods Production"
+    REJECTED_GOODS = "Rejected Goods"
+    STOCK_ADJUSTMENT = "Stock Adjustment"
 
 
-VIEW_ROLES = [
-    UserRole.SUPER_ADMIN,
-    UserRole.PLANT_MANAGER,
-    UserRole.PRODUCTION_MANAGER,
-    UserRole.QUALITY_MANAGER,
-    UserRole.MAINTENANCE_ENGINEER,
-    UserRole.STORE_MANAGER,
-    UserRole.PRODUCTION_SUPERVISOR,
-]
-
-
-MANAGE_ROLES = [
-    UserRole.SUPER_ADMIN,
-    UserRole.PRODUCTION_MANAGER,
-    UserRole.STORE_MANAGER,
-    UserRole.PRODUCTION_SUPERVISOR,
-]
-
-
-@router.post(
-    "",
-    response_model=InventoryMovementResponse,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[
-        Depends(
-            require_roles(*MANAGE_ROLES)
-        )
-    ],
-)
-def create_inventory_movement(
-    data: InventoryMovementCreate,
-    current_user: User = Depends(
-        get_current_user
-    ),
-    db: Session = Depends(get_db),
-):
-    service = InventoryMovementService(db)
-
-    return service.create_movement(
-        data=data,
-        created_by_id=current_user.id,
-    )
-
-
-@router.get(
-    "",
-    response_model=InventoryMovementListResponse,
-    dependencies=[
-        Depends(
-            require_roles(*VIEW_ROLES)
-        )
-    ],
-)
-def list_inventory_movements(
-    search: Optional[str] = Query(
-        default=None
-    ),
-    movement_type: Optional[str] = Query(
-        default=None
-    ),
-    raw_material_id: Optional[int] = Query(
-        default=None,
+class InventoryMovementCreate(BaseModel):
+    raw_material_id: int = Field(
+        ...,
         gt=0,
-    ),
-    page: int = Query(
-        default=1,
-        ge=1,
-    ),
-    limit: int = Query(
-        default=10,
-        ge=1,
-        le=100,
-    ),
-    db: Session = Depends(get_db),
-):
-    service = InventoryMovementService(db)
+    )
 
-    return service.list_movements(
-        search=search,
-        movement_type=movement_type,
-        raw_material_id=raw_material_id,
-        page=page,
-        limit=limit,
+    movement_type: InventoryMovementType
+
+    quantity: Decimal = Field(
+        ...,
+        gt=0,
+    )
+
+    reference_number: Optional[str] = Field(
+        default=None,
+        max_length=100,
+    )
+
+    reason: Optional[str] = Field(
+        default=None,
+        max_length=1000,
     )
 
 
-@router.get(
-    "/stock/{raw_material_id}",
-    response_model=InventoryStockResponse,
-    dependencies=[
-        Depends(
-            require_roles(*VIEW_ROLES)
-        )
-    ],
-)
-def get_inventory_stock(
-    raw_material_id: int,
-    db: Session = Depends(get_db),
-):
-    service = InventoryMovementService(db)
+class InventoryMovementResponse(BaseModel):
+    id: int
+    transaction_number: str
+    raw_material_id: int
+    movement_type: InventoryMovementType
+    quantity: Decimal
+    stock_before: Decimal
+    stock_after: Decimal
+    reference_number: Optional[str]
+    reason: Optional[str]
+    created_by_id: int
+    created_at: datetime
 
-    return service.get_stock(
-        raw_material_id
+    model_config = ConfigDict(
+        from_attributes=True
     )
 
 
-@router.get(
-    "/history/{raw_material_id}",
-    response_model=InventoryTransactionHistoryResponse,
-    dependencies=[
-        Depends(
-            require_roles(*VIEW_ROLES)
-        )
-    ],
-)
-def get_transaction_history(
-    raw_material_id: int,
-    db: Session = Depends(get_db),
-):
-    service = InventoryMovementService(db)
-
-    return service.get_transaction_history(
-        raw_material_id
-    )
+class InventoryMovementListResponse(BaseModel):
+    items: list[InventoryMovementResponse]
+    total: int
+    page: int
+    limit: int
+    pages: int
 
 
-@router.get(
-    "/{movement_id}",
-    response_model=InventoryMovementResponse,
-    dependencies=[
-        Depends(
-            require_roles(*VIEW_ROLES)
-        )
-    ],
-)
-def get_inventory_movement(
-    movement_id: int,
-    db: Session = Depends(get_db),
-):
-    service = InventoryMovementService(db)
+class InventoryStockResponse(BaseModel):
+    raw_material_id: int
+    available_quantity: Decimal
+    minimum_stock_level: Decimal
+    reorder_level: Decimal
+    stock_status: str
 
-    return service.get_movement(
-        movement_id
-    )
+
+class InventoryTransactionHistoryResponse(BaseModel):
+    raw_material_id: int
+    total_transactions: int
+    total_receipts: Decimal
+    total_consumption: Decimal
+    total_adjustments: Decimal
+    total_rejected: Decimal
+    current_stock: Decimal

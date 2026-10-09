@@ -1,170 +1,112 @@
-from fastapi import APIRouter, Depends, status
-from sqlalchemy.orm import Session
+from datetime import datetime
 
-from core.dependencies import get_current_user, require_roles
-from core.enums import PlantStatus, UserRole
-from database import get_db
-from models.user import User
-from schemas.plant import PlantCreate, PlantResponse, PlantUpdate
-from services.plant_service import PlantService
+from pydantic import BaseModel, ConfigDict, Field
+
+from core.enums import PlantStatus
 
 
-router = APIRouter(
-    prefix="/api/v1/plants",
-    tags=["Plants"],
-)
+class PlantCreate(BaseModel):
+    name: str = Field(
+        min_length=2,
+        max_length=150,
+    )
 
+    code: str = Field(
+        min_length=2,
+        max_length=50,
+    )
 
-@router.post(
-    "",
-    response_model=PlantResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_plant(
-    data: PlantCreate,
-    _: User = Depends(
-        require_roles(UserRole.SUPER_ADMIN)
-    ),
-    db: Session = Depends(get_db),
-):
-    service = PlantService(db)
+    address: str = Field(
+        min_length=3,
+        max_length=500,
+    )
 
-    return service.create(
-        name=data.name,
-        code=data.code,
-        address=data.address,
-        city=data.city,
-        state=data.state,
-        country=data.country,
-        production_capacity=data.production_capacity,
-        status_value=data.status,
-        manager_id=data.manager_id,
+    city: str = Field(
+        min_length=2,
+        max_length=100,
+    )
+
+    state: str = Field(
+        min_length=2,
+        max_length=100,
+    )
+
+    country: str = Field(
+        min_length=2,
+        max_length=100,
+        default="India",
+    )
+
+    production_capacity: int = Field(
+        gt=0,
+    )
+
+    status: PlantStatus = PlantStatus.ACTIVE
+
+    manager_id: int | None = Field(
+        default=None,
+        gt=0,
     )
 
 
-@router.get(
-    "",
-    response_model=list[PlantResponse],
-)
-def list_plants(
-    _: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    service = PlantService(db)
+class PlantUpdate(BaseModel):
+    name: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=150,
+    )
 
-    return service.get_all()
+    address: str | None = Field(
+        default=None,
+        min_length=3,
+        max_length=500,
+    )
 
+    city: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=100,
+    )
 
-@router.get(
-    "/{plant_id}",
-    response_model=PlantResponse,
-)
-def get_plant(
-    plant_id: int,
-    _: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    service = PlantService(db)
+    state: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=100,
+    )
 
-    return service.get_by_id(plant_id)
+    country: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=100,
+    )
 
+    production_capacity: int | None = Field(
+        default=None,
+        gt=0,
+    )
 
-@router.put(
-    "/{plant_id}",
-    response_model=PlantResponse,
-)
-def update_plant(
-    plant_id: int,
-    data: PlantUpdate,
-    _: User = Depends(
-        require_roles(
-            UserRole.SUPER_ADMIN,
-            UserRole.PLANT_MANAGER,
-        )
-    ),
-    db: Session = Depends(get_db),
-):
-    service = PlantService(db)
+    status: PlantStatus | None = None
 
-    return service.update(
-        plant_id=plant_id,
-        data=data,
+    manager_id: int | None = Field(
+        default=None,
+        gt=0,
     )
 
 
-@router.patch(
-    "/{plant_id}/status",
-    response_model=PlantResponse,
-)
-def update_plant_status(
-    plant_id: int,
-    status_value: PlantStatus,
-    _: User = Depends(
-        require_roles(
-            UserRole.SUPER_ADMIN,
-            UserRole.PLANT_MANAGER,
-        )
-    ),
-    db: Session = Depends(get_db),
-):
-    service = PlantService(db)
+class PlantResponse(BaseModel):
+    id: int
+    name: str
+    code: str
+    address: str
+    city: str
+    state: str
+    country: str
+    production_capacity: int
+    status: PlantStatus
+    manager_id: int | None
+    created_at: datetime
+    updated_at: datetime
 
-    return service.update_status(
-        plant_id=plant_id,
-        status_value=status_value,
+    model_config = ConfigDict(
+        from_attributes=True,
     )
-
-
-@router.patch(
-    "/{plant_id}/manager/{manager_id}",
-    response_model=PlantResponse,
-)
-def assign_plant_manager(
-    plant_id: int,
-    manager_id: int,
-    _: User = Depends(
-        require_roles(UserRole.SUPER_ADMIN)
-    ),
-    db: Session = Depends(get_db),
-):
-    service = PlantService(db)
-
-    return service.assign_manager(
-        plant_id=plant_id,
-        manager_id=manager_id,
-    )
-
-
-@router.delete(
-    "/{plant_id}/manager",
-    response_model=PlantResponse,
-)
-def remove_plant_manager(
-    plant_id: int,
-    _: User = Depends(
-        require_roles(UserRole.SUPER_ADMIN)
-    ),
-    db: Session = Depends(get_db),
-):
-    service = PlantService(db)
-
-    return service.remove_manager(plant_id)
-
-
-@router.patch(
-    "/{plant_id}/deactivate",
-    response_model=PlantResponse,
-)
-def deactivate_plant(
-    plant_id: int,
-    _: User = Depends(
-        require_roles(
-            UserRole.SUPER_ADMIN,
-            UserRole.PLANT_MANAGER,
-        )
-    ),
-    db: Session = Depends(get_db),
-):
-    service = PlantService(db)
-
-    return service.deactivate(plant_id)

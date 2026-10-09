@@ -1,174 +1,121 @@
+from enum import Enum
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy.orm import Session
-
-from core.dependencies import require_roles
-from core.enums import UserRole
-from database import get_db
-from schemas.defect import (
-    DefectCreate,
-    DefectListResponse,
-    DefectResponse,
-    DefectUpdate,
-)
-from services.defect_service import DefectService
+from pydantic import BaseModel, ConfigDict, Field
 
 
-router = APIRouter(
-    prefix="/api/v1/defects",
-    tags=["Defects"],
-)
+class DefectSeverity(str, Enum):
+    MINOR = "Minor"
+    MAJOR = "Major"
+    CRITICAL = "Critical"
 
 
-VIEW_ROLES = [
-    UserRole.SUPER_ADMIN,
-    UserRole.QUALITY_MANAGER,
-    UserRole.PLANT_MANAGER,
-    UserRole.PRODUCTION_MANAGER,
-    UserRole.PRODUCTION_SUPERVISOR,
-]
+class ResolutionStatus(str, Enum):
+    OPEN = "Open"
+    IN_PROGRESS = "In Progress"
+    RESOLVED = "Resolved"
+    CLOSED = "Closed"
 
 
-MANAGE_ROLES = [
-    UserRole.SUPER_ADMIN,
-    UserRole.QUALITY_MANAGER,
-]
+class DefectBase(BaseModel):
+    defect_number: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+    )
+
+    defect_type: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+    )
+
+    severity: DefectSeverity
+
+    production_batch_id: int = Field(
+        ...,
+        gt=0,
+    )
+
+    product_id: int = Field(
+        ...,
+        gt=0,
+    )
+
+    quantity_affected: int = Field(
+        ...,
+        gt=0,
+    )
+
+    root_cause: str = Field(
+        ...,
+        min_length=1,
+    )
+
+    corrective_action: Optional[str] = None
+
+    resolution_status: ResolutionStatus = (
+        ResolutionStatus.OPEN
+    )
 
 
-@router.post(
-    "",
-    response_model=DefectResponse,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[
-        Depends(
-            require_roles(*MANAGE_ROLES)
-        )
-    ],
-)
-def create_defect(
-    data: DefectCreate,
-    db: Session = Depends(get_db),
-):
-    service = DefectService(db)
-
-    return service.create_defect(data)
+class DefectCreate(DefectBase):
+    pass
 
 
-@router.get(
-    "",
-    response_model=DefectListResponse,
-    dependencies=[
-        Depends(
-            require_roles(*VIEW_ROLES)
-        )
-    ],
-)
-def list_defects(
-    search: Optional[str] = Query(
-        default=None
-    ),
-    defect_type: Optional[str] = Query(
-        default=None
-    ),
-    severity: Optional[str] = Query(
-        default=None
-    ),
-    resolution_status: Optional[str] = Query(
-        default=None
-    ),
-    production_batch_id: Optional[int] = Query(
+class DefectUpdate(BaseModel):
+    defect_number: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+    )
+
+    defect_type: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+    )
+
+    severity: Optional[DefectSeverity] = None
+
+    production_batch_id: Optional[int] = Field(
         default=None,
         gt=0,
-    ),
-    product_id: Optional[int] = Query(
+    )
+
+    product_id: Optional[int] = Field(
         default=None,
         gt=0,
-    ),
-    page: int = Query(
-        default=1,
-        ge=1,
-    ),
-    limit: int = Query(
-        default=10,
-        ge=1,
-        le=100,
-    ),
-    db: Session = Depends(get_db),
-):
-    service = DefectService(db)
+    )
 
-    return service.list_defects(
-        search=search,
-        defect_type=defect_type,
-        severity=severity,
-        resolution_status=resolution_status,
-        production_batch_id=production_batch_id,
-        product_id=product_id,
-        page=page,
-        limit=limit,
+    quantity_affected: Optional[int] = Field(
+        default=None,
+        gt=0,
+    )
+
+    root_cause: Optional[str] = Field(
+        default=None,
+        min_length=1,
+    )
+
+    corrective_action: Optional[str] = None
+
+    resolution_status: Optional[ResolutionStatus] = None
+
+
+class DefectResponse(DefectBase):
+    id: int
+    created_at: object
+    updated_at: object
+
+    model_config = ConfigDict(
+        from_attributes=True
     )
 
 
-@router.get(
-    "/{defect_id}",
-    response_model=DefectResponse,
-    dependencies=[
-        Depends(
-            require_roles(*VIEW_ROLES)
-        )
-    ],
-)
-def get_defect(
-    defect_id: int,
-    db: Session = Depends(get_db),
-):
-    service = DefectService(db)
-
-    return service.get_defect(
-        defect_id
-    )
-
-
-@router.put(
-    "/{defect_id}",
-    response_model=DefectResponse,
-    dependencies=[
-        Depends(
-            require_roles(*MANAGE_ROLES)
-        )
-    ],
-)
-def update_defect(
-    defect_id: int,
-    data: DefectUpdate,
-    db: Session = Depends(get_db),
-):
-    service = DefectService(db)
-
-    return service.update_defect(
-        defect_id,
-        data,
-    )
-
-
-@router.delete(
-    "/{defect_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[
-        Depends(
-            require_roles(*MANAGE_ROLES)
-        )
-    ],
-)
-def delete_defect(
-    defect_id: int,
-    db: Session = Depends(get_db),
-):
-    service = DefectService(db)
-
-    service.delete_defect(
-        defect_id
-    )
-
-    return None
+class DefectListResponse(BaseModel):
+    items: list[DefectResponse]
+    total: int
+    page: int
+    limit: int
+    pages: int

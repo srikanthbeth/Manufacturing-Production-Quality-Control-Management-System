@@ -1,174 +1,122 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from datetime import date
 
-from core.dependencies import get_current_user
-from database import get_db
-
-from schemas.reports import (
-    DailyProductionReportResponse,
-    MonthlyProductionReportResponse,
-    MachinePerformanceReportResponse,
-    ProductProductionReportResponse,
-    QualityReportResponse,
-    DefectAnalysisResponse,
-    MaterialConsumptionReportResponse,
-    WorkerPerformanceReportResponse,
-    ShiftPerformanceReportResponse,
-    DowntimeAnalysisResponse,
-)
-
-from services.report_service import ReportService
+from pydantic import BaseModel, ConfigDict
 
 
-router = APIRouter(
-    prefix="/api/v1/reports",
-    tags=["Advanced Reports"],
-)
+class DailyProductionReportResponse(BaseModel):
+    date: date
+    total_production_orders: int
+    planned_quantity: int
+    produced_quantity: int
+    rejected_quantity: int
+    completed_orders: int
+    production_efficiency: float
+    rejection_rate: float
 
 
-@router.get(
-    "/daily-production",
-    response_model=list[
-        DailyProductionReportResponse
-    ],
-)
-def get_daily_production_report(
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    service = ReportService(db)
-
-    return service.get_daily_production()
+class MonthlyProductionReportResponse(BaseModel):
+    year: int
+    month: int
+    total_production_orders: int
+    planned_quantity: int
+    produced_quantity: int
+    rejected_quantity: int
+    completed_orders: int
+    production_efficiency: float
+    rejection_rate: float
 
 
-@router.get(
-    "/monthly-production",
-    response_model=list[
-        MonthlyProductionReportResponse
-    ],
-)
-def get_monthly_production_report(
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    service = ReportService(db)
-
-    return service.get_monthly_production()
-
-
-@router.get(
-    "/machine-performance",
-    response_model=list[
-        MachinePerformanceReportResponse
-    ],
-)
-def get_machine_performance_report(
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    service = ReportService(db)
-
-    return service.get_machine_performance()
+class MachinePerformanceReportResponse(BaseModel):
+    machine_id: int
+    machine_code: str
+    machine_type: str
+    production_line_id: int | None
+    operating_hours: float
+    downtime_hours: float
+    utilization_percentage: float
+    production_quantity: int
+    rejected_quantity: int
+    rejection_rate: float
+    maintenance_count: int
+    machine_status: str
 
 
-@router.get(
-    "/product-production",
-    response_model=list[
-        ProductProductionReportResponse
-    ],
-)
-def get_product_production_report(
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    service = ReportService(db)
-
-    return service.get_product_production()
+class ProductProductionReportResponse(BaseModel):
+    product_id: int
+    product_name: str
+    product_code: str
+    total_production_orders: int
+    planned_quantity: int
+    produced_quantity: int
+    rejected_quantity: int
+    completed_orders: int
+    production_efficiency: float
+    rejection_rate: float
 
 
-@router.get(
-    "/quality",
-    response_model=QualityReportResponse,
-)
-def get_quality_report(
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    service = ReportService(db)
-
-    return service.get_quality_report()
+class QualityReportResponse(BaseModel):
+    total_inspections: int
+    passed_inspections: int
+    failed_inspections: int
+    pending_inspections: int
+    pass_percentage: float
+    fail_percentage: float
 
 
-@router.get(
-    "/defects",
-    response_model=list[
-        DefectAnalysisResponse
-    ],
-)
-def get_defect_report(
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    service = ReportService(db)
-
-    return service.get_defect_analysis()
+class DefectAnalysisResponse(BaseModel):
+    defect_type: str
+    severity: str
+    defect_count: int
+    quantity_affected: int
+    resolved_defects: int
+    open_defects: int
 
 
-@router.get(
-    "/material-consumption",
-    response_model=list[
-        MaterialConsumptionReportResponse
-    ],
-)
-def get_material_consumption_report(
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    service = ReportService(db)
-
-    return service.get_material_consumption()
+class MaterialConsumptionReportResponse(BaseModel):
+    material_id: int
+    material_name: str
+    material_code: str
+    stock_in: float
+    stock_out: float
+    consumption: float
+    current_stock: float
+    minimum_stock_level: float
+    reorder_level: float
+    stock_status: str
 
 
-@router.get(
-    "/worker-performance",
-    response_model=list[
-        WorkerPerformanceReportResponse
-    ],
-)
-def get_worker_performance_report(
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    service = ReportService(db)
-
-    return service.get_worker_performance()
+class WorkerPerformanceReportResponse(BaseModel):
+    worker_id: int
+    worker_name: str
+    employee_code: str
+    assigned_batches: int
+    completed_batches: int
+    produced_quantity: int
+    rejected_quantity: int
+    production_efficiency: float
+    rejection_rate: float
 
 
-@router.get(
-    "/shift-performance",
-    response_model=list[
-        ShiftPerformanceReportResponse
-    ],
-)
-def get_shift_performance_report(
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    service = ReportService(db)
-
-    return service.get_shift_performance()
+class ShiftPerformanceReportResponse(BaseModel):
+    shift_id: int
+    shift_name: str
+    total_workers: int
+    production_orders: int
+    completed_orders: int
+    produced_quantity: int
+    rejected_quantity: int
+    production_efficiency: float
+    rejection_rate: float
 
 
-@router.get(
-    "/downtime",
-    response_model=list[
-        DowntimeAnalysisResponse
-    ],
-)
-def get_downtime_analysis_report(
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    service = ReportService(db)
+class DowntimeAnalysisResponse(BaseModel):
+    machine_id: int
+    machine_code: str
+    production_line_id: int | None
+    downtime_events: int
+    total_downtime_minutes: float
+    total_downtime_hours: float
 
-    return service.get_downtime_analysis()
+
+class ReportsConfigResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)

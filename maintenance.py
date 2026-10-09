@@ -1,205 +1,185 @@
-from typing import Optional
+from datetime import datetime
+from decimal import Decimal
+from enum import Enum
+from typing import Any, Optional
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    Query,
-    status,
-)
-from sqlalchemy.orm import Session
-
-from core.dependencies import require_roles
-from core.enums import UserRole
-from database import get_db
-from schemas.maintenance import (
-    MaintenanceAlertListResponse,
-    MaintenanceCreate,
-    MaintenanceListResponse,
-    MaintenanceResponse,
-    MaintenanceUpdate,
-)
-from services.maintenance_service import (
-    MaintenanceService,
-)
+from pydantic import BaseModel, ConfigDict, Field
 
 
-router = APIRouter(
-    prefix="/api/v1/maintenance",
-    tags=["Machine Maintenance"],
-)
+class MaintenanceType(str, Enum):
+    PREVENTIVE = "Preventive"
+    BREAKDOWN = "Breakdown"
 
 
-VIEW_ROLES = [
-    UserRole.SUPER_ADMIN,
-    UserRole.PLANT_MANAGER,
-    UserRole.PRODUCTION_MANAGER,
-    UserRole.QUALITY_MANAGER,
-    UserRole.MAINTENANCE_ENGINEER,
-    UserRole.PRODUCTION_SUPERVISOR,
-]
+class MaintenanceStatus(str, Enum):
+    SCHEDULED = "Scheduled"
+    IN_PROGRESS = "In Progress"
+    COMPLETED = "Completed"
+    CANCELLED = "Cancelled"
 
 
-MANAGE_ROLES = [
-    UserRole.SUPER_ADMIN,
-    UserRole.MAINTENANCE_ENGINEER,
-]
+class AlertStatus(str, Enum):
+    YES = "Yes"
+    NO = "No"
 
 
-@router.post(
-    "",
-    response_model=MaintenanceResponse,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[
-        Depends(
-            require_roles(*MANAGE_ROLES)
-        )
-    ],
-)
-def create_maintenance(
-    data: MaintenanceCreate,
-    db: Session = Depends(get_db),
-):
-    service = MaintenanceService(db)
+class SparePartUsage(BaseModel):
+    part_name: str = Field(
+        ...,
+        min_length=1,
+        max_length=150,
+    )
 
-    return service.create_maintenance(
-        data
+    quantity: int = Field(
+        ...,
+        gt=0,
+    )
+
+    unit_cost: Decimal = Field(
+        default=Decimal("0"),
+        ge=0,
     )
 
 
-@router.get(
-    "",
-    response_model=MaintenanceListResponse,
-    dependencies=[
-        Depends(
-            require_roles(*VIEW_ROLES)
-        )
-    ],
-)
-def list_maintenance(
-    search: Optional[str] = Query(
-        default=None
-    ),
-    maintenance_type: Optional[str] = Query(
-        default=None
-    ),
-    maintenance_status: Optional[str] = Query(
-        default=None
-    ),
-    machine_id: Optional[int] = Query(
+class MaintenanceBase(BaseModel):
+    maintenance_number: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+    )
+
+    machine_id: int = Field(
+        ...,
+        gt=0,
+    )
+
+    maintenance_type: MaintenanceType
+
+    maintenance_status: MaintenanceStatus = (
+        MaintenanceStatus.SCHEDULED
+    )
+
+    scheduled_date: datetime
+
+    completed_date: Optional[datetime] = None
+
+    next_due_date: Optional[datetime] = None
+
+    technician_id: Optional[int] = Field(
         default=None,
         gt=0,
-    ),
-    technician_id: Optional[int] = Query(
+    )
+
+    issue_description: Optional[str] = None
+
+    maintenance_description: str = Field(
+        ...,
+        min_length=1,
+    )
+
+    root_cause: Optional[str] = None
+
+    corrective_action: Optional[str] = None
+
+    spare_parts_used: Optional[
+        list[SparePartUsage]
+    ] = None
+
+    maintenance_cost: Decimal = Field(
+        default=Decimal("0"),
+        ge=0,
+    )
+
+
+class MaintenanceCreate(MaintenanceBase):
+    pass
+
+
+class MaintenanceUpdate(BaseModel):
+    maintenance_number: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+    )
+
+    machine_id: Optional[int] = Field(
         default=None,
         gt=0,
-    ),
-    page: int = Query(
-        default=1,
-        ge=1,
-    ),
-    limit: int = Query(
-        default=10,
-        ge=1,
-        le=100,
-    ),
-    db: Session = Depends(get_db),
-):
-    service = MaintenanceService(db)
+    )
 
-    return service.list_maintenance(
-        search=search,
-        maintenance_type=maintenance_type,
-        maintenance_status=(
-            maintenance_status
-        ),
-        machine_id=machine_id,
-        technician_id=technician_id,
-        page=page,
-        limit=limit,
+    maintenance_type: Optional[MaintenanceType] = None
+
+    maintenance_status: Optional[
+        MaintenanceStatus
+    ] = None
+
+    scheduled_date: Optional[datetime] = None
+
+    completed_date: Optional[datetime] = None
+
+    next_due_date: Optional[datetime] = None
+
+    technician_id: Optional[int] = Field(
+        default=None,
+        gt=0,
+    )
+
+    issue_description: Optional[str] = None
+
+    maintenance_description: Optional[str] = Field(
+        default=None,
+        min_length=1,
+    )
+
+    root_cause: Optional[str] = None
+
+    corrective_action: Optional[str] = None
+
+    spare_parts_used: Optional[
+        list[SparePartUsage]
+    ] = None
+
+    maintenance_cost: Optional[Decimal] = Field(
+        default=None,
+        ge=0,
     )
 
 
-@router.get(
-    "/alerts/due",
-    response_model=MaintenanceAlertListResponse,
-    dependencies=[
-        Depends(
-            require_roles(*VIEW_ROLES)
-        )
-    ],
-)
-def get_due_maintenance_alerts(
-    db: Session = Depends(get_db),
-):
-    service = MaintenanceService(db)
+class MaintenanceResponse(MaintenanceBase):
+    id: int
+    alert_sent: AlertStatus
+    created_at: datetime
+    updated_at: datetime
 
-    alerts = service.get_due_alerts()
-
-    return {
-        "items": alerts,
-        "total": len(alerts),
-    }
-
-
-@router.get(
-    "/{maintenance_id}",
-    response_model=MaintenanceResponse,
-    dependencies=[
-        Depends(
-            require_roles(*VIEW_ROLES)
-        )
-    ],
-)
-def get_maintenance(
-    maintenance_id: int,
-    db: Session = Depends(get_db),
-):
-    service = MaintenanceService(db)
-
-    return service.get_maintenance(
-        maintenance_id
+    model_config = ConfigDict(
+        from_attributes=True
     )
 
 
-@router.put(
-    "/{maintenance_id}",
-    response_model=MaintenanceResponse,
-    dependencies=[
-        Depends(
-            require_roles(*MANAGE_ROLES)
-        )
-    ],
-)
-def update_maintenance(
-    maintenance_id: int,
-    data: MaintenanceUpdate,
-    db: Session = Depends(get_db),
-):
-    service = MaintenanceService(db)
+class MaintenanceListResponse(BaseModel):
+    items: list[MaintenanceResponse]
+    total: int
+    page: int
+    limit: int
+    pages: int
 
-    return service.update_maintenance(
-        maintenance_id,
-        data,
+
+class MaintenanceAlertResponse(BaseModel):
+    id: int
+    maintenance_number: str
+    machine_id: int
+    maintenance_type: MaintenanceType
+    scheduled_date: datetime
+    next_due_date: Optional[datetime]
+    maintenance_status: MaintenanceStatus
+    technician_id: Optional[int]
+    alert_message: str
+
+    model_config = ConfigDict(
+        from_attributes=True
     )
 
 
-@router.delete(
-    "/{maintenance_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[
-        Depends(
-            require_roles(*MANAGE_ROLES)
-        )
-    ],
-)
-def delete_maintenance(
-    maintenance_id: int,
-    db: Session = Depends(get_db),
-):
-    service = MaintenanceService(db)
-
-    service.delete_maintenance(
-        maintenance_id
-    )
-
-    return None
+class MaintenanceAlertListResponse(BaseModel):
+    items: list[MaintenanceAlertResponse]
+    total: int

@@ -1,164 +1,90 @@
-from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy.orm import Session
+from datetime import datetime
 
-from core.dependencies import (
-    get_current_user,
-    require_roles,
-)
-from core.enums import ProductStatus, UserRole
-from database import get_db
-from schemas.product import (
-    ProductCreate,
-    ProductListResponse,
-    ProductResponse,
-    ProductUpdate,
-)
-from services.product_service import ProductService
+from pydantic import BaseModel, ConfigDict, Field
+
+from core.enums import ProductStatus
 
 
-router = APIRouter(
-    prefix="/api/v1/products",
-    tags=["Products"],
-)
+class ProductCreate(BaseModel):
+    name: str = Field(
+        min_length=2,
+        max_length=150,
+    )
 
+    category: str = Field(
+        min_length=2,
+        max_length=100,
+    )
 
-@router.post(
-    "",
-    response_model=ProductResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_product(
-    data: ProductCreate,
-    db: Session = Depends(get_db),
-    current_user=Depends(
-        require_roles(
-            UserRole.SUPER_ADMIN,
-            UserRole.PLANT_MANAGER,
-            UserRole.PRODUCTION_MANAGER,
-        )
-    ),
-):
-    service = ProductService(db)
+    sku: str = Field(
+        min_length=2,
+        max_length=100,
+    )
 
-    return service.create(data)
+    unit_of_measurement: str = Field(
+        min_length=1,
+        max_length=50,
+    )
 
+    status: ProductStatus = ProductStatus.ACTIVE
 
-@router.get(
-    "",
-    response_model=ProductListResponse,
-)
-def list_products(
-    search: str | None = Query(
-        default=None,
-    ),
-    category: str | None = Query(
-        default=None,
-    ),
-    status_value: ProductStatus | None = Query(
-        default=None,
-    ),
-    page: int = Query(
-        default=1,
-        ge=1,
-    ),
-    page_size: int = Query(
-        default=10,
-        ge=1,
-        le=100,
-    ),
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    service = ProductService(db)
-
-    return service.list(
-        search=search,
-        category=category,
-        status_value=status_value,
-        page=page,
-        page_size=page_size,
+    standard_production_time: int = Field(
+        gt=0,
     )
 
 
-@router.get(
-    "/{product_id}",
-    response_model=ProductResponse,
-)
-def get_product(
-    product_id: int,
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    service = ProductService(db)
+class ProductUpdate(BaseModel):
+    name: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=150,
+    )
 
-    return service.get_by_id(product_id)
+    category: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=100,
+    )
 
+    sku: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=100,
+    )
 
-@router.put(
-    "/{product_id}",
-    response_model=ProductResponse,
-)
-def update_product(
-    product_id: int,
-    data: ProductUpdate,
-    db: Session = Depends(get_db),
-    current_user=Depends(
-        require_roles(
-            UserRole.SUPER_ADMIN,
-            UserRole.PLANT_MANAGER,
-            UserRole.PRODUCTION_MANAGER,
-        )
-    ),
-):
-    service = ProductService(db)
+    unit_of_measurement: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=50,
+    )
 
-    return service.update(
-        product_id,
-        data,
+    status: ProductStatus | None = None
+
+    standard_production_time: int | None = Field(
+        default=None,
+        gt=0,
     )
 
 
-@router.patch(
-    "/{product_id}/status",
-    response_model=ProductResponse,
-)
-def update_product_status(
-    product_id: int,
-    status_value: ProductStatus,
-    db: Session = Depends(get_db),
-    current_user=Depends(
-        require_roles(
-            UserRole.SUPER_ADMIN,
-            UserRole.PLANT_MANAGER,
-            UserRole.PRODUCTION_MANAGER,
-        )
-    ),
-):
-    service = ProductService(db)
+class ProductResponse(BaseModel):
+    id: int
+    name: str
+    category: str
+    sku: str
+    unit_of_measurement: str
+    status: ProductStatus
+    standard_production_time: int
+    created_at: datetime
+    updated_at: datetime
 
-    return service.update_status(
-        product_id,
-        status_value,
+    model_config = ConfigDict(
+        from_attributes=True,
     )
 
 
-@router.delete(
-    "/{product_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-def delete_product(
-    product_id: int,
-    db: Session = Depends(get_db),
-    current_user=Depends(
-        require_roles(
-            UserRole.SUPER_ADMIN,
-            UserRole.PLANT_MANAGER,
-            UserRole.PRODUCTION_MANAGER,
-        )
-    ),
-):
-    service = ProductService(db)
-
-    service.delete(product_id)
-
-    return None
+class ProductListResponse(BaseModel):
+    items: list[ProductResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int

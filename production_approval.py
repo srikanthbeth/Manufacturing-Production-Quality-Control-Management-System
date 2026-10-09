@@ -1,183 +1,59 @@
-from fastapi import APIRouter, Depends, status
-from sqlalchemy.orm import Session
+from datetime import datetime
+from enum import Enum
 
-from core.dependencies import get_current_user
-from database import get_db
-from models.user import User
-from schemas.production_approval import (
-    ProductionApprovalResponse,
-    WorkflowCommentRequest,
-)
-from services.production_approval_service import (
-    ProductionApprovalService,
-)
+from pydantic import BaseModel, ConfigDict, Field
 
 
-router = APIRouter(
-    prefix="/api/v1/production-orders",
-    tags=["Production Approval Workflow"],
-)
+class ProductionWorkflowStatus(str, Enum):
+    PENDING_SUPERVISOR_REVIEW = "Pending Supervisor Review"
+    SUPERVISOR_APPROVED = "Supervisor Approved"
+    MATERIAL_CHECKED = "Material Checked"
+    PRODUCTION_STARTED = "Production Started"
+    QUALITY_INSPECTED = "Quality Inspected"
+    PRODUCTION_COMPLETED = "Production Completed"
+    PENDING_MANAGER_APPROVAL = "Pending Manager Approval"
+    MANAGER_APPROVED = "Manager Approved"
+    SUPERVISOR_REJECTED = "Supervisor Rejected"
+    MANAGER_REJECTED = "Manager Rejected"
 
 
-@router.get(
-    "/{production_order_id}/workflow",
-    response_model=ProductionApprovalResponse,
-)
-def get_workflow(
-    production_order_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    service = ProductionApprovalService(db)
-
-    return service.get(
-        production_order_id
+class WorkflowCommentRequest(BaseModel):
+    comment: str | None = Field(
+        default=None,
+        max_length=2000,
     )
 
 
-@router.post(
-    "/{production_order_id}/workflow/supervisor-approve",
-    response_model=ProductionApprovalResponse,
-)
-def supervisor_approve(
-    production_order_id: int,
-    data: WorkflowCommentRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    service = ProductionApprovalService(db)
+class ProductionApprovalResponse(BaseModel):
+    id: int
+    production_order_id: int
+    workflow_status: ProductionWorkflowStatus
 
-    return service.supervisor_approve(
-        production_order_id=production_order_id,
-        current_user=current_user,
-        comment=data.comment,
-    )
+    supervisor_id: int | None
+    supervisor_reviewed_at: datetime | None
+    supervisor_comment: str | None
 
+    material_checked_by_id: int | None
+    material_checked_at: datetime | None
+    material_comment: str | None
 
-@router.post(
-    "/{production_order_id}/workflow/supervisor-reject",
-    response_model=ProductionApprovalResponse,
-)
-def supervisor_reject(
-    production_order_id: int,
-    data: WorkflowCommentRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    service = ProductionApprovalService(db)
+    production_started_by_id: int | None
+    production_started_at: datetime | None
 
-    return service.supervisor_reject(
-        production_order_id=production_order_id,
-        current_user=current_user,
-        comment=data.comment,
-    )
+    quality_inspected_by_id: int | None
+    quality_inspected_at: datetime | None
+    quality_comment: str | None
 
+    production_completed_by_id: int | None
+    production_completed_at: datetime | None
 
-@router.post(
-    "/{production_order_id}/workflow/material-check",
-    response_model=ProductionApprovalResponse,
-)
-def material_check(
-    production_order_id: int,
-    data: WorkflowCommentRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    service = ProductionApprovalService(db)
+    manager_id: int | None
+    manager_approved_at: datetime | None
+    manager_comment: str | None
 
-    return service.material_check(
-        production_order_id=production_order_id,
-        current_user=current_user,
-        comment=data.comment,
-    )
+    created_at: datetime
+    updated_at: datetime
 
-
-@router.post(
-    "/{production_order_id}/workflow/start",
-    response_model=ProductionApprovalResponse,
-)
-def start_production(
-    production_order_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    service = ProductionApprovalService(db)
-
-    return service.start_production(
-        production_order_id=production_order_id,
-        current_user=current_user,
-    )
-
-
-@router.post(
-    "/{production_order_id}/workflow/quality-inspection",
-    response_model=ProductionApprovalResponse,
-)
-def quality_inspection(
-    production_order_id: int,
-    data: WorkflowCommentRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    service = ProductionApprovalService(db)
-
-    return service.quality_inspected(
-        production_order_id=production_order_id,
-        current_user=current_user,
-        comment=data.comment,
-    )
-
-
-@router.post(
-    "/{production_order_id}/workflow/complete",
-    response_model=ProductionApprovalResponse,
-)
-def complete_production(
-    production_order_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    service = ProductionApprovalService(db)
-
-    return service.complete_production(
-        production_order_id=production_order_id,
-        current_user=current_user,
-    )
-
-
-@router.post(
-    "/{production_order_id}/workflow/manager-approve",
-    response_model=ProductionApprovalResponse,
-)
-def manager_approve(
-    production_order_id: int,
-    data: WorkflowCommentRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    service = ProductionApprovalService(db)
-
-    return service.manager_approve(
-        production_order_id=production_order_id,
-        current_user=current_user,
-        comment=data.comment,
-    )
-
-
-@router.post(
-    "/{production_order_id}/workflow/manager-reject",
-    response_model=ProductionApprovalResponse,
-)
-def manager_reject(
-    production_order_id: int,
-    data: WorkflowCommentRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    service = ProductionApprovalService(db)
-
-    return service.manager_reject(
-        production_order_id=production_order_id,
-        current_user=current_user,
-        comment=data.comment,
+    model_config = ConfigDict(
+        from_attributes=True,
     )

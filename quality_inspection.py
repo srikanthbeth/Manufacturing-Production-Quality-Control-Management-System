@@ -1,161 +1,125 @@
+from datetime import datetime
+from enum import Enum
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy.orm import Session
-
-from core.dependencies import get_current_user, require_roles
-from core.enums import UserRole
-from database import get_db
-from schemas.quality_inspection import (
-    QualityInspectionCreate,
-    QualityInspectionListResponse,
-    QualityInspectionResponse,
-    QualityInspectionUpdate,
-)
-from services.quality_inspection_service import (
-    QualityInspectionService,
-)
+from pydantic import BaseModel, ConfigDict, Field
 
 
-router = APIRouter(
-    prefix="/api/v1/quality-inspections",
-    tags=["Quality Inspections"],
-)
+class InspectionType(str, Enum):
+    INCOMING_MATERIAL = "Incoming Material Inspection"
+    IN_PROCESS = "In-Process Inspection"
+    FINAL_PRODUCT = "Final Product Inspection"
 
 
-VIEW_ROLES = [
-    UserRole.SUPER_ADMIN,
-    UserRole.QUALITY_MANAGER,
-    UserRole.PLANT_MANAGER,
-    UserRole.PRODUCTION_MANAGER,
-    UserRole.PRODUCTION_SUPERVISOR,
-]
-
-MANAGE_ROLES = [
-    UserRole.SUPER_ADMIN,
-    UserRole.QUALITY_MANAGER,
-]
+class InspectionResult(str, Enum):
+    PENDING = "Pending"
+    PASS = "Pass"
+    FAIL = "Fail"
 
 
-@router.post(
-    "",
-    response_model=QualityInspectionResponse,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[
-        Depends(require_roles(*MANAGE_ROLES))
-    ],
-)
-def create_quality_inspection(
-    data: QualityInspectionCreate,
-    db: Session = Depends(get_db),
-):
-    service = QualityInspectionService(db)
+class QualityInspectionBase(BaseModel):
+    inspection_number: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+    )
 
-    return service.create_inspection(data)
+    inspection_type: InspectionType
+
+    inspector_id: int = Field(
+        ...,
+        gt=0,
+    )
+
+    production_batch_id: int = Field(
+        ...,
+        gt=0,
+    )
+
+    inspection_date: datetime
+
+    parameters: str = Field(
+        ...,
+        min_length=1,
+    )
+
+    expected_value: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+    )
+
+    actual_value: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+    )
+
+    result: InspectionResult = InspectionResult.PENDING
+
+    remarks: Optional[str] = None
 
 
-@router.get(
-    "",
-    response_model=QualityInspectionListResponse,
-    dependencies=[
-        Depends(require_roles(*VIEW_ROLES))
-    ],
-)
-def list_quality_inspections(
-    search: Optional[str] = Query(
+class QualityInspectionCreate(QualityInspectionBase):
+    pass
+
+
+class QualityInspectionUpdate(BaseModel):
+    inspection_number: Optional[str] = Field(
         default=None,
-    ),
-    inspection_type: Optional[str] = Query(
-        default=None,
-    ),
-    result: Optional[str] = Query(
-        default=None,
-    ),
-    production_batch_id: Optional[int] = Query(
+        min_length=1,
+        max_length=100,
+    )
+
+    inspection_type: Optional[InspectionType] = None
+
+    inspector_id: Optional[int] = Field(
         default=None,
         gt=0,
-    ),
-    inspector_id: Optional[int] = Query(
+    )
+
+    production_batch_id: Optional[int] = Field(
         default=None,
         gt=0,
-    ),
-    page: int = Query(
-        default=1,
-        ge=1,
-    ),
-    limit: int = Query(
-        default=10,
-        ge=1,
-        le=100,
-    ),
-    db: Session = Depends(get_db),
-):
-    service = QualityInspectionService(db)
+    )
 
-    return service.list_inspections(
-        search=search,
-        inspection_type=inspection_type,
-        result=result,
-        production_batch_id=production_batch_id,
-        inspector_id=inspector_id,
-        page=page,
-        limit=limit,
+    inspection_date: Optional[datetime] = None
+
+    parameters: Optional[str] = Field(
+        default=None,
+        min_length=1,
+    )
+
+    expected_value: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=255,
+    )
+
+    actual_value: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=255,
+    )
+
+    result: Optional[InspectionResult] = None
+
+    remarks: Optional[str] = None
+
+
+class QualityInspectionResponse(QualityInspectionBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(
+        from_attributes=True
     )
 
 
-@router.get(
-    "/{inspection_id}",
-    response_model=QualityInspectionResponse,
-    dependencies=[
-        Depends(require_roles(*VIEW_ROLES))
-    ],
-)
-def get_quality_inspection(
-    inspection_id: int,
-    db: Session = Depends(get_db),
-):
-    service = QualityInspectionService(db)
-
-    return service.get_inspection(
-        inspection_id
-    )
-
-
-@router.put(
-    "/{inspection_id}",
-    response_model=QualityInspectionResponse,
-    dependencies=[
-        Depends(require_roles(*MANAGE_ROLES))
-    ],
-)
-def update_quality_inspection(
-    inspection_id: int,
-    data: QualityInspectionUpdate,
-    db: Session = Depends(get_db),
-):
-    service = QualityInspectionService(db)
-
-    return service.update_inspection(
-        inspection_id,
-        data,
-    )
-
-
-@router.delete(
-    "/{inspection_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[
-        Depends(require_roles(*MANAGE_ROLES))
-    ],
-)
-def delete_quality_inspection(
-    inspection_id: int,
-    db: Session = Depends(get_db),
-):
-    service = QualityInspectionService(db)
-
-    service.delete_inspection(
-        inspection_id
-    )
-
-    return None
+class QualityInspectionListResponse(BaseModel):
+    items: list[QualityInspectionResponse]
+    total: int
+    page: int
+    limit: int
+    pages: int

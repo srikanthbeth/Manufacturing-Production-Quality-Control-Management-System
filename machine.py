@@ -1,169 +1,77 @@
-from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy.orm import Session
+from datetime import date, datetime
 
-from core.dependencies import get_current_user, require_roles
-from core.enums import MachineStatus, UserRole
-from database import get_db
-from schemas.machine import (
-    MachineCreate,
-    MachineResponse,
-    MachineStatusUpdate,
-    MachineUpdate,
-)
-from services.machine_service import MachineService
+from pydantic import BaseModel, ConfigDict, Field
+
+from core.enums import MachineStatus
 
 
-router = APIRouter(
-    prefix="/api/v1/machines",
-    tags=["Machines"],
-)
+class MachineCreate(BaseModel):
+    machine_code: str = Field(
+        min_length=1,
+        max_length=100,
+    )
+
+    machine_type: str = Field(
+        min_length=1,
+        max_length=150,
+    )
+
+    production_line_id: int = Field(
+        gt=0,
+    )
+
+    installation_date: date
+
+    status: MachineStatus = MachineStatus.IDLE
+
+    operating_hours: float = Field(
+        default=0,
+        ge=0,
+    )
 
 
-MANAGE_MACHINE_ROLES = (
-    UserRole.SUPER_ADMIN,
-    UserRole.PLANT_MANAGER,
-    UserRole.MAINTENANCE_ENGINEER,
-    UserRole.PRODUCTION_MANAGER,
-)
-
-
-@router.post(
-    "",
-    response_model=MachineResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_machine(
-    data: MachineCreate,
-    db: Session = Depends(get_db),
-    current_user=Depends(
-        require_roles(*MANAGE_MACHINE_ROLES)
-    ),
-):
-    service = MachineService(db)
-
-    return service.create(data)
-
-
-@router.get(
-    "",
-)
-def list_machines(
-    search: str | None = Query(
+class MachineUpdate(BaseModel):
+    machine_type: str | None = Field(
         default=None,
-    ),
-    production_line_id: int | None = Query(
+        min_length=1,
+        max_length=150,
+    )
+
+    production_line_id: int | None = Field(
         default=None,
         gt=0,
-    ),
-    machine_status: MachineStatus | None = Query(
+    )
+
+    installation_date: date | None = None
+
+    operating_hours: float | None = Field(
         default=None,
-    ),
-    page: int = Query(
-        default=1,
-        ge=1,
-    ),
-    page_size: int = Query(
-        default=10,
-        ge=1,
-        le=100,
-    ),
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    service = MachineService(db)
-
-    return service.list(
-        search=search,
-        production_line_id=production_line_id,
-        status=machine_status,
-        page=page,
-        page_size=page_size,
+        ge=0,
     )
 
 
-@router.get(
-    "/{machine_id}",
-    response_model=MachineResponse,
-)
-def get_machine(
-    machine_id: int,
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    service = MachineService(db)
-
-    return service.get(machine_id)
+class MachineStatusUpdate(BaseModel):
+    status: MachineStatus
 
 
-@router.get(
-    "/production-line/{production_line_id}",
-    response_model=list[MachineResponse],
-)
-def get_machines_by_production_line(
-    production_line_id: int,
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    service = MachineService(db)
+class MachineResponse(BaseModel):
+    id: int
+    machine_code: str
+    machine_type: str
+    production_line_id: int
+    installation_date: date
+    status: MachineStatus
+    operating_hours: float
+    created_at: datetime
+    updated_at: datetime
 
-    return service.get_by_production_line(
-        production_line_id
+    model_config = ConfigDict(
+        from_attributes=True,
     )
 
 
-@router.put(
-    "/{machine_id}",
-    response_model=MachineResponse,
-)
-def update_machine(
-    machine_id: int,
-    data: MachineUpdate,
-    db: Session = Depends(get_db),
-    current_user=Depends(
-        require_roles(*MANAGE_MACHINE_ROLES)
-    ),
-):
-    service = MachineService(db)
-
-    return service.update(
-        machine_id,
-        data,
-    )
-
-
-@router.patch(
-    "/{machine_id}/status",
-    response_model=MachineResponse,
-)
-def update_machine_status(
-    machine_id: int,
-    data: MachineStatusUpdate,
-    db: Session = Depends(get_db),
-    current_user=Depends(
-        require_roles(*MANAGE_MACHINE_ROLES)
-    ),
-):
-    service = MachineService(db)
-
-    return service.update_status(
-        machine_id,
-        data,
-    )
-
-
-@router.delete(
-    "/{machine_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-def delete_machine(
-    machine_id: int,
-    db: Session = Depends(get_db),
-    current_user=Depends(
-        require_roles(*MANAGE_MACHINE_ROLES)
-    ),
-):
-    service = MachineService(db)
-
-    service.delete(machine_id)
-
-    return None
+class MachineListResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: list[MachineResponse]

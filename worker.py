@@ -1,97 +1,106 @@
 from datetime import datetime
+from typing import Optional
 
-from sqlalchemy import Column
-from sqlalchemy import DateTime
-from sqlalchemy import ForeignKey
-from sqlalchemy import Integer
-from sqlalchemy import String
-from sqlalchemy import Text
-from sqlalchemy import UniqueConstraint
-from sqlalchemy.sql import func
-
-from database import Base
+from pydantic import BaseModel
+from pydantic import ConfigDict
+from pydantic import Field
 
 
-class Worker(Base):
-    __tablename__ = "workers"
-
-    id = Column(
-        Integer,
-        primary_key=True,
-        index=True,
+class WorkerCreate(BaseModel):
+    user_id: int = Field(gt=0)
+    employee_code: str = Field(
+        min_length=2,
+        max_length=50,
     )
-
-    user_id = Column(
-        Integer,
-        ForeignKey(
-            "users.id",
-            ondelete="CASCADE",
-        ),
-        nullable=False,
-        unique=True,
-        index=True,
+    skill: str = Field(
+        min_length=2,
+        max_length=150,
     )
-
-    employee_code = Column(
-        String(50),
-        nullable=False,
-        unique=True,
-        index=True,
+    department: str = Field(
+        min_length=2,
+        max_length=150,
     )
-
-    skill = Column(
-        String(150),
-        nullable=False,
+    shift: str = Field(
+        min_length=2,
+        max_length=50,
     )
-
-    department = Column(
-        String(150),
-        nullable=False,
+    production_line_id: Optional[int] = Field(
+        default=None,
+        gt=0,
     )
-
-    shift = Column(
-        String(50),
-        nullable=False,
-    )
-
-    production_line_id = Column(
-        Integer,
-        ForeignKey(
-            "production_lines.id",
-            ondelete="SET NULL",
-        ),
-        nullable=True,
-        index=True,
-    )
-
-    status = Column(
-        String(50),
-        nullable=False,
+    status: str = Field(
         default="Active",
-        index=True,
+        min_length=2,
+        max_length=50,
+    )
+    profile_description: Optional[str] = None
+
+
+class WorkerUpdate(BaseModel):
+    employee_code: Optional[str] = Field(
+        default=None,
+        min_length=2,
+        max_length=50,
+    )
+    skill: Optional[str] = Field(
+        default=None,
+        min_length=2,
+        max_length=150,
+    )
+    department: Optional[str] = Field(
+        default=None,
+        min_length=2,
+        max_length=150,
+    )
+    shift: Optional[str] = Field(
+        default=None,
+        min_length=2,
+        max_length=50,
+    )
+    production_line_id: Optional[int] = Field(
+        default=None,
+        gt=0,
+    )
+    status: Optional[str] = Field(
+        default=None,
+        min_length=2,
+        max_length=50,
+    )
+    profile_description: Optional[str] = None
+
+
+class WorkerResponse(BaseModel):
+    id: int
+    user_id: int
+    employee_code: str
+    skill: str
+    department: str
+    shift: str
+    production_line_id: Optional[int]
+    status: str
+    profile_description: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(
+        from_attributes=True
     )
 
-    profile_description = Column(
-        Text,
-        nullable=True,
-    )
 
-    created_at = Column(
-        DateTime,
-        nullable=False,
-        server_default=func.now(),
-    )
+class WorkerListResponse(BaseModel):
+    items: list[WorkerResponse]
+    total: int
+    page: int
+    page_size: int
 
-    updated_at = Column(
-        DateTime,
-        nullable=False,
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
 
-    __table_args__ = (
-        UniqueConstraint(
-            "employee_code",
-            name="uq_workers_employee_code",
-        ),
+class WorkerBatchAssignmentResponse(BaseModel):
+    id: int
+    worker_id: int
+    production_batch_id: int
+    assigned_at: datetime
+    created_at: datetime
+
+    model_config = ConfigDict(
+        from_attributes=True
     )

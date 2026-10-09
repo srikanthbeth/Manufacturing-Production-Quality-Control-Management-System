@@ -1,294 +1,163 @@
-from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy.orm import Session
+from datetime import datetime
 
-from core.dependencies import get_current_user, require_roles
-from core.enums import MaterialStatus, UserRole
-from database import get_db
-from schemas.raw_material import (
-    MaterialAdjustmentRequest,
-    MaterialHistoryResponse,
-    MaterialStockRequest,
-    MaterialTransactionResponse,
-    RawMaterialCreate,
-    RawMaterialListResponse,
-    RawMaterialResponse,
-    RawMaterialUpdate,
-)
-from services.raw_material_service import RawMaterialService
+from pydantic import BaseModel, ConfigDict, Field
+
+from core.enums import MaterialStatus, MaterialTransactionType
 
 
-router = APIRouter(
-    prefix="/api/v1/raw-materials",
-    tags=["Raw Materials"],
-)
+class RawMaterialCreate(BaseModel):
+    name: str = Field(
+        min_length=2,
+        max_length=150,
+    )
 
+    material_code: str = Field(
+        min_length=2,
+        max_length=100,
+    )
 
-# ============================================================
-# MATERIAL MASTER
-# ============================================================
+    category: str = Field(
+        min_length=2,
+        max_length=100,
+    )
 
+    unit: str = Field(
+        min_length=1,
+        max_length=50,
+    )
 
-@router.post(
-    "",
-    response_model=RawMaterialResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_raw_material(
-    data: RawMaterialCreate,
-    db: Session = Depends(get_db),
-    current_user=Depends(
-        require_roles(
-            UserRole.SUPER_ADMIN,
-            UserRole.STORE_MANAGER,
-            UserRole.PRODUCTION_MANAGER,
-        )
-    ),
-):
-    service = RawMaterialService(db)
+    available_quantity: int = Field(
+        default=0,
+        ge=0,
+    )
 
-    return service.create(data)
+    minimum_stock_level: int = Field(
+        default=0,
+        ge=0,
+    )
 
+    reorder_level: int = Field(
+        default=0,
+        ge=0,
+    )
 
-@router.get(
-    "",
-    response_model=RawMaterialListResponse,
-)
-def list_raw_materials(
-    search: str | None = Query(
+    supplier_reference: str | None = Field(
         default=None,
-    ),
-    category: str | None = Query(
+        max_length=255,
+    )
+
+    status: MaterialStatus = MaterialStatus.ACTIVE
+
+
+class RawMaterialUpdate(BaseModel):
+    name: str | None = Field(
         default=None,
-    ),
-    status_value: MaterialStatus | None = Query(
+        min_length=2,
+        max_length=150,
+    )
+
+    material_code: str | None = Field(
         default=None,
-    ),
-    page: int = Query(
-        default=1,
-        ge=1,
-    ),
-    page_size: int = Query(
-        default=10,
-        ge=1,
-        le=100,
-    ),
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    service = RawMaterialService(db)
+        min_length=2,
+        max_length=100,
+    )
 
-    return service.list(
-        search=search,
-        category=category,
-        status_value=status_value,
-        page=page,
-        page_size=page_size,
+    category: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=100,
+    )
+
+    unit: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=50,
+    )
+
+    minimum_stock_level: int | None = Field(
+        default=None,
+        ge=0,
+    )
+
+    reorder_level: int | None = Field(
+        default=None,
+        ge=0,
+    )
+
+    supplier_reference: str | None = Field(
+        default=None,
+        max_length=255,
+    )
+
+    status: MaterialStatus | None = None
+
+
+class RawMaterialResponse(BaseModel):
+    id: int
+    name: str
+    material_code: str
+    category: str
+    unit: str
+    available_quantity: int
+    minimum_stock_level: int
+    reorder_level: int
+    supplier_reference: str | None
+    status: MaterialStatus
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(
+        from_attributes=True,
     )
 
 
-@router.get(
-    "/{material_id}",
-    response_model=RawMaterialResponse,
-)
-def get_raw_material(
-    material_id: int,
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    service = RawMaterialService(db)
-
-    return service.get_by_id(material_id)
+class RawMaterialListResponse(BaseModel):
+    items: list[RawMaterialResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
 
 
-@router.put(
-    "/{material_id}",
-    response_model=RawMaterialResponse,
-)
-def update_raw_material(
-    material_id: int,
-    data: RawMaterialUpdate,
-    db: Session = Depends(get_db),
-    current_user=Depends(
-        require_roles(
-            UserRole.SUPER_ADMIN,
-            UserRole.STORE_MANAGER,
-            UserRole.PRODUCTION_MANAGER,
-        )
-    ),
-):
-    service = RawMaterialService(db)
+class MaterialStockRequest(BaseModel):
+    quantity: int = Field(
+        gt=0,
+    )
 
-    return service.update(
-        material_id,
-        data,
+    reason: str | None = Field(
+        default=None,
+        max_length=500,
     )
 
 
-@router.patch(
-    "/{material_id}/status",
-    response_model=RawMaterialResponse,
-)
-def update_raw_material_status(
-    material_id: int,
-    status_value: MaterialStatus,
-    db: Session = Depends(get_db),
-    current_user=Depends(
-        require_roles(
-            UserRole.SUPER_ADMIN,
-            UserRole.STORE_MANAGER,
-            UserRole.PRODUCTION_MANAGER,
-        )
-    ),
-):
-    service = RawMaterialService(db)
+class MaterialAdjustmentRequest(BaseModel):
+    quantity: int
 
-    return service.update_status(
-        material_id,
-        status_value,
+    reason: str = Field(
+        min_length=2,
+        max_length=500,
     )
 
 
-@router.delete(
-    "/{material_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-def delete_raw_material(
-    material_id: int,
-    db: Session = Depends(get_db),
-    current_user=Depends(
-        require_roles(
-            UserRole.SUPER_ADMIN,
-            UserRole.STORE_MANAGER,
-            UserRole.PRODUCTION_MANAGER,
-        )
-    ),
-):
-    service = RawMaterialService(db)
+class MaterialTransactionResponse(BaseModel):
+    id: int
+    material_id: int
+    transaction_type: MaterialTransactionType
+    quantity: int
+    quantity_before: int
+    quantity_after: int
+    reason: str | None
+    created_by: int
+    created_at: datetime
 
-    service.delete(material_id)
-
-    return None
-
-
-# ============================================================
-# STOCK-IN
-# ============================================================
-
-
-@router.post(
-    "/{material_id}/stock-in",
-    response_model=RawMaterialResponse,
-)
-def stock_in(
-    material_id: int,
-    data: MaterialStockRequest,
-    db: Session = Depends(get_db),
-    current_user=Depends(
-        require_roles(
-            UserRole.SUPER_ADMIN,
-            UserRole.STORE_MANAGER,
-            UserRole.PRODUCTION_MANAGER,
-            UserRole.PRODUCTION_SUPERVISOR,
-        )
-    ),
-):
-    service = RawMaterialService(db)
-
-    return service.stock_in(
-        material_id=material_id,
-        data=data,
-        user_id=current_user.id,
+    model_config = ConfigDict(
+        from_attributes=True,
     )
 
 
-# ============================================================
-# STOCK-OUT
-# ============================================================
-
-
-@router.post(
-    "/{material_id}/stock-out",
-    response_model=RawMaterialResponse,
-)
-def stock_out(
-    material_id: int,
-    data: MaterialStockRequest,
-    db: Session = Depends(get_db),
-    current_user=Depends(
-        require_roles(
-            UserRole.SUPER_ADMIN,
-            UserRole.STORE_MANAGER,
-            UserRole.PRODUCTION_MANAGER,
-            UserRole.PRODUCTION_SUPERVISOR,
-        )
-    ),
-):
-    service = RawMaterialService(db)
-
-    return service.stock_out(
-        material_id=material_id,
-        data=data,
-        user_id=current_user.id,
-    )
-
-
-# ============================================================
-# MATERIAL ADJUSTMENT
-# ============================================================
-
-
-@router.post(
-    "/{material_id}/adjustment",
-    response_model=RawMaterialResponse,
-)
-def material_adjustment(
-    material_id: int,
-    data: MaterialAdjustmentRequest,
-    db: Session = Depends(get_db),
-    current_user=Depends(
-        require_roles(
-            UserRole.SUPER_ADMIN,
-            UserRole.STORE_MANAGER,
-            UserRole.PRODUCTION_MANAGER,
-        )
-    ),
-):
-    service = RawMaterialService(db)
-
-    return service.adjustment(
-        material_id=material_id,
-        data=data,
-        user_id=current_user.id,
-    )
-
-
-# ============================================================
-# MATERIAL USAGE / TRANSACTION HISTORY
-# ============================================================
-
-
-@router.get(
-    "/{material_id}/history",
-    response_model=MaterialHistoryResponse,
-)
-def material_history(
-    material_id: int,
-    page: int = Query(
-        default=1,
-        ge=1,
-    ),
-    page_size: int = Query(
-        default=10,
-        ge=1,
-        le=100,
-    ),
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    service = RawMaterialService(db)
-
-    return service.history(
-        material_id=material_id,
-        page=page,
-        page_size=page_size,
-    )
+class MaterialHistoryResponse(BaseModel):
+    items: list[MaterialTransactionResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
